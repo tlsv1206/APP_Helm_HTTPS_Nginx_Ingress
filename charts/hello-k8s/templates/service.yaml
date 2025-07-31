@@ -1,0 +1,23 @@
+# This file is part of the hello-k8s Helm chart.
+# It defines the service that exposes the Hello K8s application
+
+# Kubernetes API version for Service
+apiVersion: v1    
+# Defines the Service resource for exposing the Hello K8s application            
+kind: Service
+
+# Identifies and organizes the Service object
+metadata: 
+  name: {{ include "hello-k8s.fullname" . }}-svc            # Name of the Service resource, using the full name template
+  namespace: {{ .Values.namespace }}                        # Namespace where the Service will be created     
+  labels:                                                   # Labels for the Service resource
+    app: {{ .Values.app.name }}                             # Application name label
+
+# Specification for the Service resource
+spec: 
+  type: {{ .Values.service.type }}                          # Type of service (e.g., ClusterIP, NodePort, LoadBalancer)
+  selector:                                                 # Identifies the pods that this service will route traffic to
+    app: {{ .Values.app.name }}                             # Application name label to match pods
+  ports:                                                    # List of ports that the service will expose
+    - port: {{ .Values.service.port }}                      # Port on which the service is exposed
+      targetPort: {{ .Values.app.port }}                    # Target port on the pods that the service will route traffic to

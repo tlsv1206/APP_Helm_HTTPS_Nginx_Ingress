@@ -1,0 +1,38 @@
+# Kubernetes API version for Ingress
+{{- if .Values.ingress.enabled }}                                                             # Conditional to include Ingress only if enabled
+apiVersion: networking.k8s.io/v1                                                              # API version for Ingress resource
+
+# Ingress resource kind
+kind: Ingress                                                                                 # Defines the Ingress resource
+
+# Identifies and organizes the Ingress object
+metadata:
+  name: {{ include "hello-k8s.fullname" . }}-ingress                                          # Name of the Ingress resource, using the full name template
+  namespace: {{ .Values.namespace }}                                                          # Namespace where the Ingress will be created
+  annotations:                                                                                # Annotations for the Ingress resource
+    nginx.ingress.kubernetes.io/rewrite-target: "/"                                           # Rewrite target for the Ingress
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"                                          # Redirect HTTP to HTTPS
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"                                    # Force SSL redirecton
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}                        # Cluster issuer for cert-manager
+    {{- range $key, $value := .Values.ingress.annotations }} 
+    {{ $key }}: "{{ $value }}"
+    {{- end }}
+
+spec:                                                                                         # Specification for the Ingress resource
+  ingressClassName: {{ .Values.ingress.className | quote }}                                   # Ingress class to use for this Ingress
+  tls:                                                                                        # TLS configuration for the Ingress 
+    - hosts:                                                                                  # List of hosts for which TLS is enabled
+        - {{ .Values.ingress.host | quote }}                                                  # Host for the Ingress, quoted to handle special characters
+      secretName: {{ .Values.ingress.tlsSecretName }}                                         # Name of the secret containing TLS certificate and key
+  rules:                                                                                      # Rules for routing traffic to services
+    - host: {{ .Values.ingress.host | quote }}                                                # Host for the Ingress rule, quoted to handle special characters
+      http:                                                                                   # HTTP rules for routing traffic
+        paths:                                                                                # List of paths for the Ingress rule
+          - path: {{ .Values.ingress.path }}                                                  # Path for the Ingress rule, using the value from values.yaml 
+            pathType: {{ .Values.ingress.pathType }}                                          # Path type for the Ingress rule
+            backend:                                                                          # Backend service to route traffic to
+              service:                                                                        # Service to route traffic to
+                name: {{ include "hello-k8s.fullname" . }}-svc                                # Name of the service to route traffic to
+                port:                                                                         # Port on which the service is exposed
+                  number: {{ .Values.service.port }}                                          # Port number for the service
+{{- end }}                                                                                    # End of Ingress resource definition

@@ -1,0 +1,11 @@
+# This file is part of the Helm chart for Hello K8s.
+# It defines the namespace in which the resources will be deployed.
+# The namespace is specified in the values.yaml file and is used to organize resources within the Kubernetes cluster.
+# The annotation "helm.sh/resource-policy: keep" ensures that the namespace is not deleted
+# when the Helm release is deleted, allowing for resource persistence across deployments.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.namespace }}             # Name of the namespace, specified in values.yaml
+  annotations:
+    "helm.sh/resource-policy": keep         # Annotation to keep the namespace when the Helm release is deleted 

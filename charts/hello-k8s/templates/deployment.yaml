@@ -1,0 +1,33 @@
+# Kubernetes API version for Deployment
+apiVersion: apps/v1
+
+# Deployment resource kind
+kind: Deployment
+
+# Identifies and organizes the Deployment object
+metadata:
+  name: {{ include "hello-k8s.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Values.app.name }}
+
+# Defines the desired state and behavior of the Deployment
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.app.name }}                                                     # Selector to match Pods managed by this Deployment 
+  template:                                                                           # Template for the Pods created by this Deployment
+    metadata:
+      labels:
+        app: {{ .Values.app.name }}                                                   # Labels for Pods to be selected by the Deployment
+    spec:
+      containers:
+        - name: {{ .Values.app.name }}                                                # Name of the container within the Pod
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"             # Image to use for the container
+          imagePullPolicy: {{ .Values.image.pullPolicy }}                             # Policy for pulling the image
+          ports:
+            - containerPort: {{ .Values.app.port }}                                   # Port on which the container listens
+          env:
+            - name: APP_ENV
+              value: "{{ .Values.app.env }}"                                          # Environment variable for the application

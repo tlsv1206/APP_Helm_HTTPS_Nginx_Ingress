@@ -1,0 +1,40 @@
+# Default values for hello-k8s production deployment.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Namespace for the production deployment
+namespace: app-production 
+
+# Replica count for the production deployment
+replicaCount: 20
+
+# Production image configuration
+image: 
+  repository: tiagovedana/hello-k8s                     # Docker repository for the production image
+  tag: prod                                             # Production image tag
+  pullPolicy: IfNotPresent                              # Image pull policy for production
+
+# Production application configuration
+app: 
+  name: hello-world-production                          # Application name for production
+  port: 5000                                            # Port on which the application listens in production
+  env: production                                       # Environment variable for production
+
+# Service configuration for the production deployment
+service: 
+  type: ClusterIP                                       # Service type for production  
+  port: 80                                              # Production service port 
+
+# Production Ingress configuration
+ingress:
+  enabled: true                                                                                              # Enable Ingress for production 
+  className: nginx-ingress-controller                                                                        # Ingress class for production
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /                                                            # Rewrite target for production Ingress
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"                                                         # Enable SSL redirect for production Ingress
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"                                                   # Force SSL redirect for production Ingress
+  clusterIssuer: letsencrypt                                                                                 # Cluster issuer for Let's Encrypt production
+  tlsSecretName: hello-world-tls                                                                             # TLS secret name for production Ingress
+  path: /                                                                                                    # Path for the production Ingress
+  pathType: Prefix                                                                                           # Path type for the production Ingress
+  host: hello-world.tvedana.com                                                                              # Host for the production Ingress

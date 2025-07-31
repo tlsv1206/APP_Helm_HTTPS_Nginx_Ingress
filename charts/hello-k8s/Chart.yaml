@@ -1,0 +1,8 @@
+# charts/hello-k8s/Chart.yaml
+# This file is part of the Helm chart for Hello K8s.
+# Helm Chart API version
+apiVersion: v2 
+name: hello-k8s                                                         # Name of the Helm chart 
+version: 0.1.0                                                          # Version of the Helm chart
+appVersion: "1.0"                                                       # Application version, used to track the version of the application being deployed 
+description: A simple Hello World web app deployed on Kubernetes        # Maintainer of the Helm chart

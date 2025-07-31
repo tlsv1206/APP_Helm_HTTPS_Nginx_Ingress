@@ -1,0 +1,40 @@
+# Default values for hello-k8s production deployment.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Namespace for the staging deployment
+namespace: app-staging
+
+# Replica count for the staging deployment
+replicaCount: 20
+
+# Staging image configuration
+image:
+  repository: tiagovedana/hello-k8s                                                                         # Docker repository for the staging image    
+  tag: staging                                                                                              # Staging image tag
+  pullPolicy: IfNotPresent                                                                                  # Image pull policy for staging
+
+# Staging application configuration
+app:
+  name: hello-world-staging                                                                                 # Application name for staging
+  port: 5000                                                                                                # Port on which the application listens in staging
+  env: staging                                                                                               # Environment variable for staging 
+
+# Service configuration for the staging deployment
+service: 
+  type: ClusterIP                                                                                            # Service type for staging  
+  port: 80                                                                                                   # Staging service port 
+
+# Staging Ingress configuration
+ingress:
+  enabled: true                                                                                              # Enable Ingress for staging 
+  className: nginx-ingress-controller                                                                        # Ingress class for staging
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /                                                            # Rewrite target for staging Ingress
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"                                                         # Enable SSL redirect for staging Ingress
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"                                                   # Force SSL redirect for staging Ingress
+  clusterIssuer: letsencrypt                                                                                 # Cluster issuer for Let's Encrypt staging
+  tlsSecretName: hello-world-tls                                                                             # TLS secret name for staging Ingress
+  path: /                                                                                                    # Path for the staging Ingress
+  pathType: Prefix                                                                                           # Path type for the staging Ingress
+  host: hello-world-staging.tvedana.com                                                                      # Host for the staging Ingress

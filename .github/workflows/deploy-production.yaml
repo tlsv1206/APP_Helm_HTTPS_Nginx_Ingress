@@ -1,0 +1,50 @@
+name: Deploy to EKS Production (PR)
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to EKS Production
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+
+    - name: Set up Helm
+      uses: azure/setup-helm@v4
+      with:
+        version: 'latest'
+
+    - name: Generate kubeconfig for EKS
+      run: |
+        aws eks update-kubeconfig --region us-east-1 --name stage-eks-cluster --kubeconfig ${{ github.workspace }}/kubeconfig.yaml
+
+    - name: Check kubectl cluster-info
+      run: kubectl cluster-info
+      env:
+        KUBECONFIG: ${{ github.workspace }}/kubeconfig.yaml
+
+    - name: Deploy Application (Hello World) to Production
+      run: |
+        helm upgrade --install hello-world-prod charts/hello-k8s \
+          --namespace app-prod \
+          --create-namespace \
+          -f charts/hello-k8s/values/values-prod.yaml
+      env:
+        KUBECONFIG: ${{ github.workspace }}/kubeconfig.yaml

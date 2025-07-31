@@ -1,0 +1,54 @@
+
+# Deploy or upgrade the hello-world Helm chart using production values
+helm install hello-world ./ \
+  --namespace app-production --create-namespace \
+  -f ./values/values-prod.yaml
+
+# Check if certificate is created
+kubectl get certificate -n app-production
+
+# Inspect details of the certificate (should reference TLS secret and issuer)
+kubectl describe certificate hello-world-tls -n app-production
+
+# Check for HTTP-01 challenge resources (used for domain validation)
+kubectl get challenge -n app-production
+kubectl describe challenge hello-world-tls-1-1507176081-2580746545 -n app-production
+
+kubectl delete validatingwebhookconfiguration nginx-ingress-production-ingress-nginx-admission
+
+# Update your DNS provider to point your domain to the ALB's hostname
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 🔍 TROUBLESHOOTING & VERIFICATION COMMANDS
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Check if certificate resource was created
+kubectl get certificate -n app-production
+
+# View certificate status and see if the secret, issuer, and DNS challenge are progressing
+kubectl describe certificate hello-world-tls -n app-production
+
+# Inspect the generated secret that holds the TLS cert/key
+kubectl get secret hello-world-tls -n app-production
+kubectl describe secret hello-world-tls-jst2c -n app-production  # Adjust based on actual secret name if different
+
+# List and describe HTTP-01 challenges (ACME verification for DNS ownership)
+kubectl get challenge -n app-production
+kubectl describe challenge hello-world-tls-1-1507176081-3752947325 -n app-production
+
+# Delete admission webhook if it causes issues with cert-manager HTTP-01 challenge ingress creation
+kubectl delete validatingwebhookconfiguration nginx-ingress-production-ingress-nginx-admission
+
+# Clean up cert and challenge to retry issuance if validation failed
+kubectl delete certificate hello-world-tls -n app-production
+kubectl delete challenge hello-world-tls-1-1507176081-3752947325 -n app-production
+
+# (Optional repeat if needed)
+kubectl delete certificate hello-world-tls -n app-production
+
+# Inspect CertificateRequest (intermediate request between Certificate and Challenge)
+kubectl get certificaterequest -n app-production
+kubectl describe certificaterequest hello-world-tls-1 -n app-production
+
+# Tail cert-manager logs for detailed debugging info (challenge failures, etc.)
+kubectl logs -n cert-manager deploy/cert-manager -f

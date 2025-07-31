@@ -1,0 +1,110 @@
+# Set up kubeconfig to access the correct EKS cluster
+aws eks update-kubeconfig --region us-east-1 --name stage-eks-cluster                                                      
+
+# STEP 1: Install cert-manager (handles TLS certificates via ACME/Let's Encrypt)
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml              # Installs CRDs and components
+kubectl apply -f ./addons/cert-manager.yaml                                                                           # Applies custom cert-manager config (e.g., ClusterIssuers)
+
+helm search repo jetstack/cert-manager --versions
+
+helm install cert-manager jetstack/cert-manager \
+  --namespace cert-manager --create-namespace \
+  --version v1.18.2 \
+  --set crds.enabled=true
+
+# Wait until cert-manager deployment is ready in the cert-manager namespace
+kubectl rollout status deploy/cert-manager -n cert-manager --timeout=2m
+
+# STEP 2: Add the ingress-nginx Helm repository (for NGINX ingress controller)
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+
+helm search repo ingress-nginx --versions
+
+# STEP 3: Install NGINX ingress controller in the app-staging namespace
+# Note: Disables admission webhooks to prevent issues with cert-manager HTTP-01 validation
+helm install nginx-ingress-controller ingress-nginx/ingress-nginx \
+  --namespace nginx-ingress-controller --create-namespace \
+  --version 4.12.3 \
+  --set controller.ingressClass=nginx-ingress-controller \                                                            # Use custom ingressClass name
+  --set controller.ingressClassByName=true \                                                                          # Match ingressClass by name
+  --set controller.ingressClassResource.name=nginx-ingress-controller \                                               # Name of the ingressClass resource
+  --set controller.ingressClassResource.enabled=true \                                                                # Ensure class is created
+  --set controller.service.type=LoadBalancer \                                                                        # Provision an external AWS ALB
+  --set controller.replicaCount=2 \                                                                                   # High availability
+  --set controller.publishService.enabled=true \                                                                      # Required for external IP publishing
+  --set controller.extraArgs.enable-annotation-validation=false \                                                     # Disable path validation issues with cert-manager
+  --set admissionWebhooks.enabled=false                                                                               # Explicitly disable the webhook
+
+# Manually fetch the external LoadBalancer hostname/IP for DNS updates (optional)
+kubectl get svc -n nginx-ingress-controller
+
+# STEP 4: Deploy ClusterIssuer (defines Let's Encrypt ACME configuration)
+helm install letsencrypt ./addonsv1
+
+kubectl apply -f ./addons/tls-issuer.yaml
+
+# Verify ClusterIssuer was created successfully
+kubectl get ClusterIssuer
+
+# STEP 5: Deploy the Hello World app to app-staging namespace
+
+# Label and annotate namespace to allow Helm to manage resources (needed for Helm upgrades)
+kubectl label namespace app-staging app.kubernetes.io/managed-by=Helm --overwrite
+kubectl annotate namespace app-staging \
+  meta.helm.sh/release-name=hello-world-staging \
+  meta.helm.sh/release-namespace=app-staging --overwrite
+
+# Install or upgrade the hello-world app via Helm with staging values
+helm upgrade --install hello-world-staging ./ \
+  --namespace app-staging --create-namespace \
+  -f ./values/values-staging.yaml
+
+# Check if certificate is created
+kubectl get certificate -n app-staging
+
+# Inspect details of the certificate (should reference TLS secret and issuer)
+kubectl describe certificate hello-world-tls -n app-staging
+
+# Check for HTTP-01 challenge resources (used for domain validation)
+kubectl get challenge -n app-staging
+kubectl describe challenge hello-world-tls-1-924580055-2219968892 -n app-staging
+
+kubectl delete validatingwebhookconfiguration nginx-ingress-staging-ingress-nginx-admission
+
+# Update your domain's DNS A/ALIAS/CNAME record to point to the above ALB hostname
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 🔍 TROUBLESHOOTING & VERIFICATION COMMANDS
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Check if certificate is created
+kubectl get certificate -n app-staging
+
+# Inspect details of the certificate (should reference TLS secret and issuer)
+kubectl describe certificate hello-world-tls -n app-staging
+
+# Check the created secret holding the TLS certs
+kubectl get secret hello-world-tls -n app-staging
+kubectl describe secret hello-world-tls-jst2c -n app-staging  # (if using dynamic secret names)
+
+# Check for HTTP-01 challenge resources (used for domain validation)
+kubectl get challenge -n app-staging
+kubectl describe challenge hello-world-tls-1-924580055-2219968892 -n app-staging
+
+# Optional: Delete and retry certificate provisioning if something failed
+kubectl delete certificate hello-world-tls -n app-staging
+kubectl delete challenge hello-world-tls-1-924580055-775234669 -n app-staging
+
+# Clean up existing certificate to force regeneration
+kubectl delete certificate hello-world-tls -n app-staging
+
+# Delete the validating webhook (only needed when using --set admissionWebhooks.enabled=false)
+kubectl delete validatingwebhookconfiguration nginx-ingress-staging-ingress-nginx-admission
+
+# Inspect CertificateRequest object (intermediate step between Certificate and Challenge)
+kubectl get certificaterequest -n app-staging
+kubectl describe certificaterequest hello-world-tls-1 -n app-staging
+
+# Stream cert-manager logs for debugging
+kubectl logs -n cert-manager deploy/cert-manager -f

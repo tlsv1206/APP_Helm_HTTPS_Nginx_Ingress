@@ -1,0 +1,112 @@
+# Authenticate kubectl with your EKS cluster
+aws eks update-kubeconfig --region us-east-1 --name stage-eks-cluster
+
+# STEP 1: Install cert-manager (used for automated TLS via Let's Encrypt)
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml                        # Core components and CRDs
+kubectl apply -f ./addons/cert-manager.yaml                                                                                     # Your custom ClusterIssuer, RBAC, or config overrides
+
+helm repo add jetstack https://charts.jetstack.io
+helm repo update
+
+helm search repo jetstack/cert-manager --versions
+
+helm install cert-manager jetstack/cert-manager \
+  --namespace cert-manager --create-namespace \
+  --version v1.18.2 \
+  --set crds.enabled=true
+
+# Wait for cert-manager deployment to be fully rolled out
+kubectl rollout status deploy/cert-manager -n cert-manager --timeout=2m
+
+# STEP 2: Add and update the ingress-nginx Helm repository
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+
+helm search repo ingress-nginx --versions
+
+# STEP 3: Install NGINX ingress controller in the app-production namespace
+# Disables admission webhook to avoid conflicts with cert-manager HTTP-01 challenges
+helm install nginx-ingress-production ingress-nginx/ingress-nginx \
+  --namespace app-production --create-namespace \
+  --set controller.ingressClass=nginx-production \                                                                              # Use custom ingressClass name
+  --set controller.ingressClassByName=true \                                                                                    # Match ingressClass by name
+  --set controller.ingressClassResource.name=nginx-production \                                                                 # Name of the ingressClass resource
+  --set controller.ingressClassResource.enabled=true \                                                                          # Ensure class is created
+  --set controller.service.type=LoadBalancer \                                                                                  # Provision an external AWS ALB
+  --set controller.replicaCount=2 \                                                                                             # High availability
+  --set controller.publishService.enabled=true \                                                                                # Required for external IP publishing
+  --set controller.extraArgs.enable-annotation-validation=false \                                                               # Disable path validation issues with cert-manager
+  --set admissionWebhooks.enabled=false                                                                                         # Explicitly disable the webhook
+
+# STEP 3.1: After Helm deploys, get the external LoadBalancer hostname
+kubectl get svc -n app-production
+
+# STEP 4: Apply the production ClusterIssuer for Let's Encrypt
+kubectl apply -f ./addons/tls-issuer-prod.yaml
+
+# Verify ClusterIssuer is successfully created and ready
+kubectl get ClusterIssuer
+
+# STEP 5: Deploy the hello-world application to production via Helm
+
+# Label the namespace so Helm can track its ownership
+kubectl label namespace app-production app.kubernetes.io/managed-by=Helm --overwrite
+
+# Annotate namespace with Helm release metadata
+kubectl annotate namespace app-production \
+  meta.helm.sh/release-name=hello-world \
+  meta.helm.sh/release-namespace=app-production --overwrite
+
+# Dep loy or upgrade the hello-world Helm chart using production values
+helm install hello-world ./ \
+  --namespace app-production --create-namespace \
+  -f ./values/values-prod.yaml
+
+# Check if certificate is created
+kubectl get certificate -n app-production
+
+# Inspect details of the certificate (should reference TLS secret and issuer)
+kubectl describe certificate hello-world-tls -n app-production
+
+# Check for HTTP-01 challenge resources (used for domain validation)
+kubectl get challenge -n app-production
+kubectl describe challenge hello-world-tls-1-1507176081-2580746545 -n app-production
+
+kubectl delete validatingwebhookconfiguration nginx-ingress-production-ingress-nginx-admission
+
+# Update your DNS provider to point your domain to the ALB's hostname
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 🔍 TROUBLESHOOTING & VERIFICATION COMMANDS
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Check if certificate resource was created
+kubectl get certificate -n app-production
+
+# View certificate status and see if the secret, issuer, and DNS challenge are progressing
+kubectl describe certificate hello-world-tls -n app-production
+
+# Inspect the generated secret that holds the TLS cert/key
+kubectl get secret hello-world-tls -n app-production
+kubectl describe secret hello-world-tls-jst2c -n app-production  # Adjust based on actual secret name if different
+
+# List and describe HTTP-01 challenges (ACME verification for DNS ownership)
+kubectl get challenge -n app-production
+kubectl describe challenge hello-world-tls-1-1507176081-3752947325 -n app-production
+
+# Delete admission webhook if it causes issues with cert-manager HTTP-01 challenge ingress creation
+kubectl delete validatingwebhookconfiguration nginx-ingress-production-ingress-nginx-admission
+
+# Clean up cert and challenge to retry issuance if validation failed
+kubectl delete certificate hello-world-tls -n app-production
+kubectl delete challenge hello-world-tls-1-1507176081-3752947325 -n app-production
+
+# (Optional repeat if needed)
+kubectl delete certificate hello-world-tls -n app-production
+
+# Inspect CertificateRequest (intermediate request between Certificate and Challenge)
+kubectl get certificaterequest -n app-production
+kubectl describe certificaterequest hello-world-tls-1 -n app-production
+
+# Tail cert-manager logs for detailed debugging info (challenge failures, etc.)
+kubectl logs -n cert-manager deploy/cert-manager -f
