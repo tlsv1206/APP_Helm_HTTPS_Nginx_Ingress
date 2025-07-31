@@ -6,7 +6,7 @@
 namespace: app-staging
 
 # Replica count for the staging deployment
-replicaCount: 20
+replicaCount: 10
 
 # Staging image configuration
 image:
