@@ -42,8 +42,8 @@ jobs:
 
     - name: Deploy Application (Hello World) to Production
       run: |
-        helm upgrade --install hello-world-prod charts/hello-k8s \
-          --namespace app-prod \
+        helm upgrade --install hello-world charts/hello-k8s \
+          --namespace app-production \
           --create-namespace \
           -f charts/hello-k8s/values/values-prod.yaml
       env:
