@@ -6,7 +6,7 @@
 namespace: app-production 
 
 # Replica count for the production deployment
-replicaCount: 20
+replicaCount: 40
 
 # Production image configuration
 image: 
